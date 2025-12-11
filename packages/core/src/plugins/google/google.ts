@@ -126,6 +126,7 @@ export type ChatCompletionChunk = {
     | 'FINISH_REASON_OTHER'
     | undefined;
   model: string;
+  thought?: string;
 };
 
 export type StreamGenerativeAiOptions = {
@@ -140,6 +141,7 @@ export type StreamGenerativeAiOptions = {
   signal?: AbortSignal;
   tools: Tool[] | undefined;
   thinkingBudget?: number;
+  includeThoughts?: boolean;
   additionalHeaders?: Record<string, string>;
 };
 
@@ -155,6 +157,7 @@ export async function* streamGenerativeAi({
   signal,
   tools,
   thinkingBudget,
+  includeThoughts,
   additionalHeaders,
 }: StreamGenerativeAiOptions): AsyncGenerator<ChatCompletionChunk> {
   const { GoogleGenAI } = await import('@google/genai');
@@ -173,6 +176,7 @@ export async function* streamGenerativeAi({
       abortSignal: signal,
       thinkingConfig: {
         thinkingBudget,
+        includeThoughts,
       },
       httpOptions: {
         headers: {
@@ -196,11 +200,16 @@ export async function* streamGenerativeAi({
     }
 
     if (chunk.candidates) {
-      outChunk.completion = chunk.candidates[0]?.content?.parts?.[0]?.text;
+      const part = chunk.candidates[0]?.content?.parts?.[0];
+      if (part?.thought) {
+        outChunk.thought = part?.text;
+      } else {
+        outChunk.completion = part?.text;
+      }
       outChunk.finish_reason = chunk.candidates[0]?.finishReason as any;
     }
 
-    if (outChunk.completion || outChunk.function_calls) {
+    if (outChunk.completion || outChunk.function_calls || outChunk.thought) {
       yield outChunk;
     }
   }

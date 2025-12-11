@@ -48,6 +48,7 @@ export type ChatGoogleNodeConfigData = {
   top_k?: number;
   maxTokens: number;
   thinkingBudget: number | undefined;
+  includeThoughts: boolean;
   headers?: { key: string; value: string }[];
 };
 
@@ -108,6 +109,8 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
 
         thinkingBudget: undefined,
         useThinkingBudgetInput: false,
+
+        includeThoughts: false,
       },
     };
 
@@ -211,6 +214,15 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
       title: 'Response',
     });
 
+    if (data.includeThoughts) {
+      outputs.push({
+        dataType: 'string',
+        id: 'thought' as PortId,
+        title: 'Thought',
+        description: 'Thought summary for the model.',
+      });
+    }
+
     outputs.push({
       dataType: 'chat-message[]',
       id: 'in-messages' as PortId,
@@ -305,6 +317,12 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
       },
       {
         type: 'toggle',
+        label: 'Include Thought Summary',
+        dataKey: 'includeThoughts',
+        helperMessage: 'Add an extra output port for the thought summary.',
+      },
+      {
+        type: 'toggle',
         label: 'Enable Tool Calling',
         dataKey: 'useToolCalling',
       },
@@ -352,6 +370,7 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
     const topP = getInputOrData(data, inputs, 'top_p', 'number');
     const useTopP = getInputOrData(data, inputs, 'useTopP', 'boolean');
     const thinkingBudget = getInputOrData(data, inputs, 'thinkingBudget', 'number');
+    const includeThoughts = getInputOrData(data, inputs, 'includeThoughts', 'boolean');
 
     const { messages } = getChatGoogleNodeMessages(inputs);
 
@@ -551,6 +570,7 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
             topK: undefined,
             tools,
             thinkingBudget,
+            includeThoughts,
             additionalHeaders: allAdditionalHeaders,
           };
           const cacheKey = JSON.stringify(options);
@@ -583,6 +603,7 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
               systemPrompt,
               tools,
               thinkingBudget,
+              includeThoughts,
               additionalHeaders: allAdditionalHeaders,
             });
           } else {
@@ -601,6 +622,7 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
           }
 
           const responseParts: string[] = [];
+          const thoughtParts: string[] = [];
           const functionCalls: FunctionCall[] = [];
 
           let throttleLastCalledTime = Date.now();
@@ -619,6 +641,15 @@ export const ChatGoogleNodeImpl: PluginNodeImpl<ChatGoogleNode> = {
               output['response' as PortId] = {
                 type: 'string',
                 value: responseParts.join('').trim(),
+              };
+            }
+
+            if (chunk.thought) {
+              thoughtParts.push(chunk.thought);
+
+              output['thought' as PortId] = {
+                type: 'string',
+                value: thoughtParts.join('').trim(),
               };
             }
 
